@@ -1,0 +1,54 @@
+device:
+  # Find your device name using `ls -l /dev/input/by-id` or `cat /proc/bus/input/devices`
+  name: HUION Huion Tablet_H952 Touch Strip
+  # path: /dev/input/eventX'
+
+axis: ABS_RX # The axis your touch strip emits events on (e.g., ABS_RX, ABS_RY)
+
+settings:
+  velocity_threshold: 1.5       # How fast you need to move for a gesture to register
+  acceleration: false           # Enable acceleration-based sensitivity adjustment
+  cooldown: 50                  # Cooldown in milliseconds between repeated actions
+  key_delay: 10                 # Delay between key press and release in ms
+  history_size: 6               # Number of samples to keep for velocity/acceleration calculation
+  grab: true                    # Grab exclusive access to the device (recommended)
+
+gestures:
+  # Volume control
+  up:
+    action:
+      command: "pactl set-sink-volume @DEFAULT_SINK@ +5%"
+  
+  down:
+    action:
+      command: "pactl set-sink-volume @DEFAULT_SINK@ -5%"
+
+# Alternative gestures (uncomment and replace the above 'gestures' section to use these)
+
+# Brightness control:
+# gestures:
+#   up:
+#     action:
+#       command: "brightnessctl set +10%"
+#   down:
+#     action:
+#       command: "brightnessctl set 10%-"
+
+# Multi-key combo (Ctrl+Shift+Z and Ctrl+Shift+Y):
+# gestures:
+#   up:
+#     action:
+#       keys: [KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_Z]
+#   down:
+#     action:
+#       keys: [KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_Y]
+
+# Find keycodes:
+# - Run: python3 -c "from evdev import ecodes; print([k for k k in dir(ecodes) if k.startswith('KEY_')])"
+# - Or check: /usr/include/linux/input-event-codes.h
+# Common ones:
+#   KEY_A through KEY_Z (letters), KEY_1 through KEY_0 (numbers)
+#   KEY_MINUS, KEY_EQUAL (- and +)
+#   KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_LEFTALT
+#   KEY_SPACE, KEY_ENTER, KEY_ESC
+#   KEY_PAGEUP, KEY_PAGEDOWN

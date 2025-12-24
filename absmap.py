@@ -10,74 +10,86 @@ from evdev import InputDevice, UInput, ecodes, list_devices
 
 def find_device(config):
     """Find device by path or name"""
-    device_config = config.get('device', {})
-    
-    if 'path' in device_config:
-        path = device_config['path']
+    device_config = config.get("device", {})
+
+    if "path" in device_config:
+        path = device_config["path"]
         if not os.path.isfile(path):
             raise ValueError(f"Device path not found: {path}")
         if os.path.islink(path):
             return os.readlink(path)
         else:
             return path
-    
-    elif 'name' in device_config:
-        name_substr = device_config['name'].lower()
+
+    elif "name" in device_config:
+        name_substr = device_config["name"].lower()
         for dev_path in list_devices():
             dev = InputDevice(dev_path)
             if name_substr in dev.name.lower():
                 print(f"Found device: {dev.name} at {dev_path}")
                 return dev_path
         raise ValueError(f"No device found matching name: {name_substr}")
-    
+
     else:
-        raise ValueError("Config must specify either 'device.path' or 'device.name'")
+        raise ValueError(
+            "Config must specify either 'device.path' or 'device.name'"
+        )
 
 
 def validate_config(config):
     """Validate configuration"""
     errors = []
-    
-    if 'device' not in config:
+
+    if "device" not in config:
         errors.append("Missing 'device' section")
-    if 'axis' not in config:
+    if "axis" not in config:
         errors.append("Missing 'axis' field")
-    if 'gestures' not in config:
+    if "gestures" not in config:
         errors.append("Missing 'gestures' section")
-    
+
     if errors:
         return errors
-    
+
     # Validate gestures
-    gestures = config.get('gestures', {})
-    
-    if 'up' in gestures:
-        if 'action' not in gestures['up']:
+    gestures = config.get("gestures", {})
+
+    if "up" in gestures:
+        if "action" not in gestures["up"]:
             errors.append("Gesture 'up': missing 'action'")
         else:
-            if 'keys' not in gestures['up']['action'] and 'command' not in gestures['up']['action']:
-                errors.append("Action for gesture 'up': missing 'keys/command'")
-    
-    if 'down' in gestures:
-        if 'action' not in gestures['down']:
+            if (
+                "keys" not in gestures["up"]["action"]
+                and "command" not in gestures["up"]["action"]
+            ):
+                errors.append(
+                    "Action for gesture 'up': missing 'keys/command'"
+                )
+
+    if "down" in gestures:
+        if "action" not in gestures["down"]:
             errors.append("Gesture 'down': missing 'action'")
         else:
-            if 'keys' not in gestures['down']['action'] and 'command' not in gestures['down']['action']:
-                errors.append("Action for gesture 'down': missing 'keys/command'")
-    
+            if (
+                "keys" not in gestures["down"]["action"]
+                and "command" not in gestures["down"]["action"]
+            ):
+                errors.append(
+                    "Action for gesture 'down': missing 'keys/command'"
+                )
+
     return errors
 
 
 def get_axis_code(axis_name):
     """Convert axis name string to evdev code"""
     axis_map = {
-        'ABS_RX': ecodes.ABS_RX,
-        'ABS_RY': ecodes.ABS_RY,
-        'ABS_WHEEL': ecodes.ABS_WHEEL,
+        "ABS_RX": ecodes.ABS_RX,
+        "ABS_RY": ecodes.ABS_RY,
+        "ABS_WHEEL": ecodes.ABS_WHEEL,
         # 'ABS_THROTTLE': ecodes.ABS_THROTTLE,
         # 'ABS_MISC': ecodes.ABS_MISC,
     }
-    
+
     code = axis_map.get(axis_name)
     if code is None:
         raise ValueError(
@@ -89,33 +101,33 @@ def get_axis_code(axis_name):
 
 def parse_key(key_str):
     """Parse key string to evdev keycode
-    
+
     Supports:
     - Direct keycode: "28" or 28
-    - KEY_ constant: "KEY_ENTER" 
+    - KEY_ constant: "KEY_ENTER"
     - Common names: "enter", "space", "ctrl", etc.
     """
     # If it's an integer, use directly
     if isinstance(key_str, int):
         return key_str
-    
+
     key_str = str(key_str).strip().upper()
-    
+
     # Try as direct number
     try:
         return int(key_str)
     except ValueError:
         pass
-    
+
     # Try with KEY_ prefix if not present
-    if not key_str.startswith('KEY_'):
-        key_str = 'KEY_' + key_str
-    
+    if not key_str.startswith("KEY_"):
+        key_str = "KEY_" + key_str
+
     # Look up in ecodes
     keycode = getattr(ecodes, key_str, None)
     if keycode is None:
         raise ValueError(f"Unknown key: {key_str}")
-    
+
     return keycode
 
 
@@ -123,18 +135,18 @@ def emit_keys(uinput, keys, key_delay):
     """Emit key press and release events"""
     if not isinstance(keys, list):
         keys = [keys]
-    
+
     # Parse all keys first
     keycodes = [parse_key(k) for k in keys]
-    
+
     # Press all keys
     for keycode in keycodes:
         uinput.write(ecodes.EV_KEY, keycode, 1)
     uinput.syn()
-    
+
     # Small delay for key registration
-    time.sleep(key_delay/1000)
-    
+    time.sleep(key_delay / 1000)
+
     # Release all keys
     for keycode in keycodes:
         uinput.write(ecodes.EV_KEY, keycode, 0)
@@ -143,25 +155,25 @@ def emit_keys(uinput, keys, key_delay):
 
 def execute_action(action, uinput, key_delay):
     """Execute action - either emit keys or run command
-    
+
     Action can be:
     - keys: [KEY_A] or keys: KEY_A
     - command: "some shell command"
     """
     if isinstance(action, dict):
-        if 'keys' in action:
+        if "keys" in action:
             try:
-                emit_keys(uinput, action['keys'], key_delay)
+                emit_keys(uinput, action["keys"], key_delay)
             except Exception as e:
                 print(f"Key emit error: {e}", file=sys.stderr)
-        
-        elif 'command' in action:
+
+        elif "command" in action:
             try:
                 subprocess.run(
-                    action['command'],
+                    action["command"],
                     shell=True,
                     capture_output=True,
-                    timeout=1 
+                    timeout=1,
                 )
             except Exception as e:
                 print(f"Command error: {e}", file=sys.stderr)
@@ -173,7 +185,7 @@ def execute_action(action, uinput, key_delay):
 
 class VelocityTracker:
     """Track velocity and acceleration of strip movement"""
-    
+
     def __init__(self, velocity_threshold, acceleration_enabled, history_size):
         self.velocity_threshold = velocity_threshold
         self.acceleration_enabled = acceleration_enabled
@@ -182,95 +194,95 @@ class VelocityTracker:
 
     def add_sample(self, timestamp, value):
         """Add a new sample and trim history"""
-                
+
         # Ignore value 0 (spurious touch/lift events)
-        #TODO: do actions on keydown/up
+        # TODO: do actions on keydown/up
         if value == 0:
             self.clear()
             return
-                
+
         self.history.append((timestamp, value))
         if len(self.history) > self.max_history:
             self.history.pop(0)
-    
+
     def get_velocity(self):
         """Calculate velocity (units per second)"""
         if len(self.history) < 2:
             return 0.0
-        
+
         t1, v1 = self.history[0]
         t2, v2 = self.history[-1]
-        
+
         dt = t2 - t1
         if dt == 0:
             return 0.0
-        
+
         dv = v2 - v1
         return dv / dt
-    
+
     def get_acceleration(self):
         """Calculate acceleration (units per second²)"""
         if not self.acceleration_enabled or len(self.history) < 3:
             return 0.0
-        
+
         # Calculate velocity at two different points
         t1, v1 = self.history[0]
-        t2, v2 = self.history[len(self.history)//2]
+        t2, v2 = self.history[len(self.history) // 2]
         t3, v3 = self.history[-1]
-        
+
         dt1 = t2 - t1
         dt2 = t3 - t2
-        
+
         if dt1 == 0 or dt2 == 0:
             return 0.0
-        
+
         vel1 = (v2 - v1) / dt1
         vel2 = (v3 - v2) / dt2
-        
+
         return (vel2 - vel1) / ((dt1 + dt2) / 2)
-    
+
     def detect_gesture(self):
         """Detect if gesture threshold is met
-        
+
         Returns: 'up', 'down', or None
         """
         if len(self.history) < 2:
             return None
-        
+
         velocity = self.get_velocity()
-        self.velocity = velocity # Always set velocity
+        self.velocity = velocity  # Always set velocity
         # print(f'     {self.velocity}') # Removed debugging print
         abs_velocity = abs(self.velocity)
-        
+
         # Check if self.velocity exceeds threshold
         if abs_velocity < self.velocity_threshold:
-            self.acceleration = 0.0 # Also set acceleration
+            self.acceleration = 0.0  # Also set acceleration
             return None
-        
+
         # Acceleration multiplier (if enabled)
         multiplier = 1.0
         if self.acceleration_enabled:
             accel = self.get_acceleration()
-            self.acceleration = accel # Always set acceleration if enabled
+            self.acceleration = accel  # Always set acceleration if enabled
             # Increase threshold if decelerating, decrease if accelerating
-            if self.velocity > 0 and self.acceleration < 0:  # Moving up but slowing
+            if self.velocity > 0 and self.acceleration < 0:
                 multiplier = 1.5
-            elif self.velocity < 0 and self.acceleration > 0:  # Moving down but slowing
+            elif self.velocity < 0 and self.acceleration > 0:
                 multiplier = 1.5
-            elif self.velocity > 0 and self.acceleration > 0:  # Moving up and speeding up
+            elif self.velocity > 0 and self.acceleration > 0:
                 multiplier = 0.7
-            elif self.velocity < 0 and self.acceleration < 0:  # Moving down and speeding up
+            elif self.velocity < 0 and self.acceleration < 0:
                 multiplier = 0.7
         else:
-            self.acceleration = 0.0 # Set acceleration to 0 if not enabled
-        
+            self.acceleration = 0.0  # Set acceleration to 0 if not enabled
+
         threshold = self.velocity_threshold * multiplier
-        
+
         if abs_velocity < threshold:
             return None
-        
-        return 'up' if self.velocity > 0 else 'down'
-    
+
+        return "up" if self.velocity > 0 else "down"
+
     def clear(self):
         """Clear history"""
         self.history.clear()
@@ -280,11 +292,11 @@ def main():
     if len(sys.argv) != 2:
         print(f"Usage: {sys.argv[0]} <config.yaml>", file=sys.stderr)
         sys.exit(1)
-    
+
     config_path = sys.argv[1]
-    
+
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config = yaml.safe_load(f)
     except FileNotFoundError:
         print(f"Config file not found: {config_path}", file=sys.stderr)
@@ -292,41 +304,41 @@ def main():
     except yaml.YAMLError as e:
         print(f"Config parse error: {e}", file=sys.stderr)
         sys.exit(1)
-    
+
     errors = validate_config(config)
     if errors:
         print("Error loading config from path: {config_path}", file=sys.stderr)
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         sys.exit(1)
-    
+
     try:
         device_path = find_device(config)
         device = InputDevice(device_path)
     except (ValueError, OSError) as e:
         print(f"Device error: {e}", file=sys.stderr)
         sys.exit(1)
-    
+
     try:
-        axis_code = get_axis_code(config['axis'])
+        axis_code = get_axis_code(config["axis"])
     except ValueError as e:
         print(f"Config error: {e}", file=sys.stderr)
         sys.exit(1)
-    
+
     # Get settings
-    settings = config.get('settings', {})
-    velocity_threshold = settings.get('velocity_threshold', 3.0)
-    acceleration = settings.get('acceleration', False)
-    cooldown_ms = settings.get('cooldown', 300)
-    key_delay_ms = settings.get('key_delay', 5)
-    history_size = settings.get('history_size', 5)
-    grab = settings.get('grab', True)
-    
-    gestures = config['gestures']
-    
+    settings = config.get("settings", {})
+    velocity_threshold = settings.get("velocity_threshold", 3.0)
+    acceleration = settings.get("acceleration", False)
+    cooldown_ms = settings.get("cooldown", 300)
+    key_delay_ms = settings.get("key_delay", 5)
+    history_size = settings.get("history_size", 5)
+    grab = settings.get("grab", True)
+
+    gestures = config["gestures"]
+
     # Create virtual input device for key emission
     uinput = UInput()
-    
+
     # Grab device if requested
     if grab:
         try:
@@ -335,7 +347,7 @@ def main():
         except OSError as e:
             print(f"Warning: Could not grab device: {e}", file=sys.stderr)
             sys.exit(1)
-    
+
     print(f"Listening to {device.name} on axis {config['axis']}")
     print("Settings: ")
     print(f"         velocity threshold: {velocity_threshold}")
@@ -344,11 +356,11 @@ def main():
     print(f"         key delay in ms   : {key_delay_ms}")
     print(f"         history size      : {history_size}")
     print(f"         grab              : {grab}")
-    
+
     # Velocity tracker
     tracker = VelocityTracker(velocity_threshold, acceleration, history_size)
     last_gesture_time = 0
-    
+
     try:
         for event in device.read_loop():
             # Only process absolute axis events for our configured axis
@@ -358,34 +370,34 @@ def main():
 
                 # Add sample to tracker
                 tracker.add_sample(timestamp, value)
-                
+
                 # Detect gesture
                 gesture = tracker.detect_gesture()
-                
+
                 if gesture is not None:
                     # Check cooldown
                     current_time = time.time() * 1000
                     if current_time - last_gesture_time < cooldown_ms:
                         continue
-                    
+
                     # Execute gesture action
                     if gesture in gestures:
                         gesture_config = gestures[gesture]
-                        action = gesture_config.get('action')
+                        action = gesture_config.get("action")
                         last_gesture_time = current_time
-                        
+
                         if action:
                             # velocity = tracker.velocity
-                            # accel = tracker.acceleration if acceleration else 0
-                            # print(f"Gesture: {gesture} (v={velocity:.1f}, a={accel:.1f})")
+                            # accel = tracker.acceleration
                             execute_action(action, uinput, key_delay_ms)
                             tracker.clear()
-    
+
     except KeyboardInterrupt:
         print("\nExiting...")
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
@@ -393,10 +405,10 @@ def main():
         if grab:
             try:
                 device.ungrab()
-            except:
+            except Exception:
                 pass
         uinput.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

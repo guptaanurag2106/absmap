@@ -7,6 +7,8 @@ import subprocess
 import time
 from evdev import InputDevice, UInput, ecodes, list_devices
 
+RETRY_TIME = 3  # in sec
+
 
 def find_device(config):
     """Find device by path or name"""
@@ -26,7 +28,7 @@ def find_device(config):
         for dev_path in list_devices():
             dev = InputDevice(dev_path)
             if name_substr in dev.name.lower():
-                print(f"Found device: {dev.name} at {dev_path}")
+                # print(f"Found device: {dev.name} at {dev_path}")
                 return dev_path
         raise ValueError(f"No device found matching name: {name_substr}")
 
@@ -299,7 +301,7 @@ def main():
         with open(config_path, "r") as f:
             config = yaml.safe_load(f)
     except FileNotFoundError:
-        print(f"Config file not found: {config_path}", file=sys.stderr)
+        print(f"Config file not found: '{config_path}'", file=sys.stderr)
         sys.exit(1)
     except yaml.YAMLError as e:
         print(f"Config parse error: {e}", file=sys.stderr)
@@ -307,16 +309,9 @@ def main():
 
     errors = validate_config(config)
     if errors:
-        print("Error loading config from path: {config_path}", file=sys.stderr)
+        print(f"Invalid config at '{config_path}':", file=sys.stderr)
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        device_path = find_device(config)
-        device = InputDevice(device_path)
-    except (ValueError, OSError) as e:
-        print(f"Device error: {e}", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -336,78 +331,106 @@ def main():
 
     gestures = config["gestures"]
 
-    # Create virtual input device for key emission
-    uinput = UInput()
+    # print(f"Listening on axis {config['axis']}")
+    # print("Settings: ")
+    # print(f"         velocity threshold: {velocity_threshold}")
+    # print(f"         acceleration      : {acceleration}")
+    # print(f"         cooldown in ms    : {cooldown_ms}")
+    # print(f"         key delay in ms   : {key_delay_ms}")
+    # print(f"         history size      : {history_size}")
+    # print(f"         grab              : {grab}")
 
-    # Grab device if requested
-    if grab:
-        try:
-            device.grab()
-            print(f"Grabbed exclusive access to {device.name}")
-        except OSError as e:
-            print(f"Warning: Could not grab device: {e}", file=sys.stderr)
-            sys.exit(1)
-
-    print(f"Listening to {device.name} on axis {config['axis']}")
-    print("Settings: ")
-    print(f"         velocity threshold: {velocity_threshold}")
-    print(f"         acceleration      : {acceleration}")
-    print(f"         cooldown in ms    : {cooldown_ms}")
-    print(f"         key delay in ms   : {key_delay_ms}")
-    print(f"         history size      : {history_size}")
-    print(f"         grab              : {grab}")
+    # Create virtual input device ONCE (persistent across reconnects)
+    try:
+        uinput = UInput(name="absmap")
+    except OSError as e:
+        print(f"Could not create virtual device: {e}", file=sys.stderr)
+        sys.exit(1)
 
     # Velocity tracker
     tracker = VelocityTracker(velocity_threshold, acceleration, history_size)
     last_gesture_time = 0
 
-    try:
-        for event in device.read_loop():
-            # Only process absolute axis events for our configured axis
-            if event.type == ecodes.EV_ABS and event.code == axis_code:
-                value = event.value
-                timestamp = event.timestamp()
+    wait_for_device_print = False
 
-                # Add sample to tracker
-                tracker.add_sample(timestamp, value)
-
-                # Detect gesture
-                gesture = tracker.detect_gesture()
-
-                if gesture is not None:
-                    # Check cooldown
-                    current_time = time.time() * 1000
-                    if current_time - last_gesture_time < cooldown_ms:
-                        continue
-
-                    # Execute gesture action
-                    if gesture in gestures:
-                        gesture_config = gestures[gesture]
-                        action = gesture_config.get("action")
-                        last_gesture_time = current_time
-
-                        if action:
-                            # velocity = tracker.velocity
-                            # accel = tracker.acceleration
-                            execute_action(action, uinput, key_delay_ms)
-                            tracker.clear()
-
-    except KeyboardInterrupt:
-        print("\nExiting...")
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        import traceback
-
-        traceback.print_exc()
-        sys.exit(1)
-
-    finally:
-        if grab:
+    while True:
+        device = None
+        try:
+            # Attempt to Find and Connect
             try:
-                device.ungrab()
-            except Exception:
-                pass
-        uinput.close()
+                device_path = find_device(config)
+                device = InputDevice(device_path)
+            except (ValueError, OSError) as e:
+                if not wait_for_device_print:
+                    print(f"Waiting for device... ({e})")
+                    wait_for_device_print = True
+                time.sleep(RETRY_TIME)
+                continue
+
+            print(f"Connected to '{device.name}' at '{device_path}'")
+            wait_for_device_print = False
+
+            # Grab Device (Fatal if fails - permission issue)
+            if grab:
+                try:
+                    device.grab()
+                    print(f"Grabbed exclusive access to '{device.name}'")
+                except OSError as e:
+                    print(
+                        f"Could not grab device '{device.name}': {e}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+
+            for event in device.read_loop():
+                # Only process absolute axis events for our configured axis
+                if event.type == ecodes.EV_ABS and event.code == axis_code:
+                    value = event.value
+                    timestamp = event.timestamp()
+
+                    tracker.add_sample(timestamp, value)
+                    gesture = tracker.detect_gesture()
+
+                    if gesture is not None:
+                        current_time = time.time() * 1000
+                        if current_time - last_gesture_time < cooldown_ms:
+                            continue
+
+                        if gesture in gestures:
+                            gesture_config = gestures[gesture]
+                            action = gesture_config.get("action")
+                            last_gesture_time = current_time
+
+                            if action:
+                                execute_action(action, uinput, key_delay_ms)
+                                tracker.clear()
+
+        except OSError as e:
+            print(f"Device disconnected: {e}")
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            break
+        except Exception as e:
+            print(f"Unexpected error: {e}", file=sys.stderr)
+            import traceback
+
+            traceback.print_exc()
+            time.sleep(RETRY_TIME)
+        finally:
+            if device:
+                if grab:
+                    try:
+                        device.ungrab()
+                    except Exception:
+                        pass
+                try:
+                    device.close()
+                except Exception:
+                    pass
+
+            tracker.clear()
+
+    uinput.close()
 
 
 if __name__ == "__main__":

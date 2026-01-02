@@ -63,9 +63,7 @@ def validate_config(config):
                 "keys" not in gestures["up"]["action"]
                 and "command" not in gestures["up"]["action"]
             ):
-                errors.append(
-                    "Action for gesture 'up': missing 'keys/command'"
-                )
+                errors.append("Action for gesture 'up': missing 'keys/command'")
 
     if "down" in gestures:
         if "action" not in gestures["down"]:

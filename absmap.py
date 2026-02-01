@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import taskw
 import sys
 import yaml
 import subprocess

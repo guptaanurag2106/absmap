@@ -8,29 +8,29 @@ This tool listens for `ABS_RX` or `ABS_RY` events (like those from a touch strip
 - Emitting key presses (e.g., `PAGEUP`, `PAGEDOWN`)
 - Running shell commands (e.g., `pactl` for volume, `brightnessctl` for screen brightness, or `ydotool` for more complex key combos).
 
-## Quick Start
+## Install & Run
 
-1.  **Clone this repo:**
-    ```bash
-    git clone https://github.com/guptaanurag2106/absmap.git
-    cd absmap
-    ```
+First, clone the repo:
+```bash
+git clone https://github.com/guptaanurag2106/absmap.git
+cd absmap
+```
 
-2.  **Make it executable:**
-    ```bash
-    chmod +x absmap.py
-    ```
+*Note: `evdev` typically requires root access or specific udev rules to read input devices. `ydotool` needs to be installed separately if you plan to use it for commands.*
 
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-    *Note: `evdev` typically requires root access or specific udev rules to read input devices. `ydotool` needs to be installed separately if you plan to use it for commands.*
+### Option A: pipx (global CLI)
 
-4.  **Run with your config:**
-    ```bash
-    ./absmap.py your_config.yml
-    ```
+```bash
+pipx install .
+absmap your_config.yml
+```
+
+### Option B: run from repo
+
+```bash
+pip install -r requirements.txt
+python absmap.py your_config.yml
+```
 
 ## Example Configuration (`basic.yml`)
 

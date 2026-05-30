@@ -7,7 +7,7 @@ import subprocess
 import time
 from evdev import InputDevice, UInput, ecodes, list_devices
 
-RETRY_TIME = 3  # in sec
+RETRY_TIME = 5  # in sec
 
 
 def find_device(config):

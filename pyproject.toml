@@ -1,3 +1,20 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "absmap"
+version = "0.1.0"
+description = "Map absolute axis events to gesture-driven key presses or commands"
+requires-python = ">=3.9"
+dependencies = [
+    "PyYAML>=5.1",
+    "evdev>=1.3.0",
+]
+
+[project.scripts]
+absmap = "absmap:main"
+
 [tool.ruff]
 line-length = 80
 target-version = "py39"
